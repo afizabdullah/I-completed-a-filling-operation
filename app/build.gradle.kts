@@ -1,9 +1,21 @@
+import java.util.Base64
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
+}
+
+// Automatically create .env from .env.example if missing (essential for clean environment/CI builds)
+val envFile = file("${rootDir}/.env")
+if (!envFile.exists()) {
+  val envExample = file("${rootDir}/.env.example")
+  if (envExample.exists()) {
+    envExample.copyTo(envFile)
+    println("Created .env from .env.example to support Secrets Gradle Plugin")
+  }
 }
 
 android {
@@ -21,18 +33,42 @@ android {
   }
 
   signingConfigs {
-    create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
-    }
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
+      val keystoreFile = file("${rootDir}/debug.keystore")
+      if (!keystoreFile.exists()) {
+        val base64File = file("${rootDir}/debug.keystore.base64")
+        if (base64File.exists()) {
+          try {
+            val base64Text = base64File.readText().replace("\\s".toRegex(), "")
+            val decodedBytes = Base64.getDecoder().decode(base64Text)
+            keystoreFile.writeBytes(decodedBytes)
+            println("Successfully decoded debug.keystore from debug.keystore.base64 at build time!")
+          } catch (e: Exception) {
+            println("Error decoding debug.keystore.base64: ${e.message}")
+          }
+        }
+      }
+      storeFile = keystoreFile
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"
+    }
+    create("release") {
+      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+      val keystoreFile = file(keystorePath)
+      if (!keystoreFile.exists()) {
+        // Fallback to the auto-decoded debug keystore to prevent task configuration or execution errors in CI
+        storeFile = file("${rootDir}/debug.keystore")
+        storePassword = "android"
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+        println("Release keystore was not found. Falling back to debugConfig signing parameters.")
+      } else {
+        storeFile = keystoreFile
+        storePassword = System.getenv("STORE_PASSWORD")
+        keyAlias = "upload"
+        keyPassword = System.getenv("KEY_PASSWORD")
+      }
     }
   }
 

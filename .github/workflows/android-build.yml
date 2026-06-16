@@ -30,6 +30,17 @@ jobs:
         fi
         chmod +x gradlew
 
+    - name: Restore Keystores and Env files
+      run: |
+        if [ -f debug.keystore.base64 ]; then
+          echo "Decoding debug.keystore..."
+          base64 -d debug.keystore.base64 > debug.keystore
+        fi
+        if [ ! -f .env ]; then
+          echo "Creating .env from .env.example..."
+          cp .env.example .env
+        fi
+
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon
 
