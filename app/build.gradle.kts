@@ -18,6 +18,44 @@ if (!envFile.exists()) {
   }
 }
 
+// Automatically decode or generate debug.keystore if missing (essential for clean environment/CI builds)
+val debugKeystoreFile = file("${rootDir}/debug.keystore")
+if (!debugKeystoreFile.exists()) {
+  val base64File = file("${rootDir}/debug.keystore.base64")
+  if (base64File.exists()) {
+    try {
+      val base64Text = base64File.readText().replace("\\s".toRegex(), "")
+      val decodedBytes = Base64.getDecoder().decode(base64Text)
+      debugKeystoreFile.writeBytes(decodedBytes)
+      println("Successfully decoded debug.keystore from debug.keystore.base64 eagerly")
+    } catch (e: Exception) {
+      println("Error decoding debug.keystore.base64 eagerly: ${e.message}")
+    }
+  }
+  // Fallback to auto-generation using keytool if base64 decoding fails or file is missing
+  if (!debugKeystoreFile.exists()) {
+    try {
+      println("debug.keystore not found, generating a brand new one using keytool...")
+      val pb = ProcessBuilder(
+        "keytool", "-genkey", "-v",
+        "-keystore", debugKeystoreFile.absolutePath,
+        "-storepass", "android",
+        "-alias", "androiddebugkey",
+        "-keypass", "android",
+        "-keyalg", "RSA",
+        "-keysize", "2048",
+        "-validity", "10000",
+        "-dname", "CN=Android Debug,O=Android,C=US"
+      )
+      val process = pb.start()
+      process.waitFor()
+      println("Successfully generated a new debug.keystore dynamically with keytool!")
+    } catch (e: Exception) {
+      println("Failed to generate debug.keystore with keytool: ${e.message}")
+    }
+  }
+}
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
@@ -34,21 +72,7 @@ android {
 
   signingConfigs {
     create("debugConfig") {
-      val keystoreFile = file("${rootDir}/debug.keystore")
-      if (!keystoreFile.exists()) {
-        val base64File = file("${rootDir}/debug.keystore.base64")
-        if (base64File.exists()) {
-          try {
-            val base64Text = base64File.readText().replace("\\s".toRegex(), "")
-            val decodedBytes = Base64.getDecoder().decode(base64Text)
-            keystoreFile.writeBytes(decodedBytes)
-            println("Successfully decoded debug.keystore from debug.keystore.base64 at build time!")
-          } catch (e: Exception) {
-            println("Error decoding debug.keystore.base64: ${e.message}")
-          }
-        }
-      }
-      storeFile = keystoreFile
+      storeFile = file("${rootDir}/debug.keystore")
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"
