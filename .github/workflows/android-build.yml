@@ -23,13 +23,6 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Setup Gradle Wrapper if missing
-      run: |
-        if [ ! -f gradlew ]; then
-          gradle wrapper
-        fi
-        chmod +x gradlew
-
     - name: Restore Keystores and Env files
       run: |
         if [ -f debug.keystore.base64 ]; then
@@ -44,6 +37,13 @@ jobs:
           echo "Creating .env from .env.example..."
           cp .env.example .env
         fi
+
+    - name: Setup Gradle Wrapper if missing
+      run: |
+        if [ ! -f gradlew ]; then
+          gradle wrapper
+        fi
+        chmod +x gradlew
 
     - name: Build Debug APK
       run: ./gradlew assembleDebug

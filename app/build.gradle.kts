@@ -1,4 +1,5 @@
 import java.util.Base64
+import java.io.File
 
 plugins {
   alias(libs.plugins.android.application)
@@ -18,42 +19,56 @@ if (!envFile.exists()) {
   }
 }
 
-// Automatically decode or generate debug.keystore if missing (essential for clean environment/CI builds)
-val debugKeystoreFile = file("${rootDir}/debug.keystore")
-if (!debugKeystoreFile.exists()) {
-  val base64File = file("${rootDir}/debug.keystore.base64")
-  if (base64File.exists()) {
-    try {
-      val base64Text = base64File.readText().replace("\\s".toRegex(), "")
-      val decodedBytes = Base64.getDecoder().decode(base64Text)
-      debugKeystoreFile.writeBytes(decodedBytes)
-      println("Successfully decoded debug.keystore from debug.keystore.base64 eagerly")
-    } catch (e: Exception) {
-      println("Error decoding debug.keystore.base64 eagerly: ${e.message}")
+// Register a task to automatically decode or generate debug.keystore if missing (execution-time only to support configuration caching)
+val rootPath = rootDir.absolutePath
+val generateDebugKeystore = tasks.register("generateDebugKeystore") {
+  val keystoreFile = File(rootPath, "debug.keystore")
+  val base64File = File(rootPath, "debug.keystore.base64")
+  outputs.file(keystoreFile)
+  doLast {
+    if (!keystoreFile.exists()) {
+      if (base64File.exists()) {
+        try {
+          val base64Text = base64File.readText().replace("\\s".toRegex(), "")
+          val decodedBytes = Base64.getDecoder().decode(base64Text)
+          keystoreFile.writeBytes(decodedBytes)
+          println("Successfully decoded debug.keystore from debug.keystore.base64 in task execution phase")
+        } catch (e: Exception) {
+          println("Error decoding debug.keystore.base64 in task: ${e.message}")
+        }
+      }
+      if (!keystoreFile.exists()) {
+        try {
+          println("debug.keystore not found, generating a brand new one using keytool in task...")
+          val pb = ProcessBuilder(
+            "keytool", "-genkey", "-v",
+            "-keystore", keystoreFile.absolutePath,
+            "-storepass", "android",
+            "-alias", "androiddebugkey",
+            "-keypass", "android",
+            "-keyalg", "RSA",
+            "-keysize", "2048",
+            "-validity", "10000",
+            "-dname", "CN=Android Debug,O=Android,C=US"
+          )
+          val process = pb.start()
+          process.waitFor()
+          println("Successfully generated a new debug.keystore dynamically with keytool in task!")
+        } catch (e: Exception) {
+          println("Failed to generate debug.keystore with keytool in task: ${e.message}")
+        }
+      }
     }
   }
-  // Fallback to auto-generation using keytool if base64 decoding fails or file is missing
-  if (!debugKeystoreFile.exists()) {
-    try {
-      println("debug.keystore not found, generating a brand new one using keytool...")
-      val pb = ProcessBuilder(
-        "keytool", "-genkey", "-v",
-        "-keystore", debugKeystoreFile.absolutePath,
-        "-storepass", "android",
-        "-alias", "androiddebugkey",
-        "-keypass", "android",
-        "-keyalg", "RSA",
-        "-keysize", "2048",
-        "-validity", "10000",
-        "-dname", "CN=Android Debug,O=Android,C=US"
-      )
-      val process = pb.start()
-      process.waitFor()
-      println("Successfully generated a new debug.keystore dynamically with keytool!")
-    } catch (e: Exception) {
-      println("Failed to generate debug.keystore with keytool: ${e.message}")
-    }
-  }
+}
+
+// Ensure the keys are generated before any building, package packaging, or signing validation
+tasks.matching {
+  it.name.startsWith("preBuild") ||
+  it.name.startsWith("validateSigning") ||
+  it.name.startsWith("package")
+}.configureEach {
+  dependsOn(generateDebugKeystore)
 }
 
 android {
