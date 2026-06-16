@@ -23,14 +23,11 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Setup Gradle Wrapper if missing
+      - name: Setup Gradle Wrapper
         run: |
-          if [ ! -f gradlew ]; then
-            gradle wrapper
-          fi
           chmod +x gradlew
 
-      # ✅ الحل الحقيقي: إنشاء keystore فعلي
+      # ✅ إنشاء keystore بطريقة صحيحة
       - name: Generate Debug Keystore
         run: |
           mkdir -p ~/.android
@@ -40,13 +37,10 @@ jobs:
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -keystore debug.keystore \
+            -keystore ~/.android/debug.keystore \
             -storepass android \
             -keypass android \
             -dname "CN=Android Debug,O=Android,C=US"
-
-          cp debug.keystore ~/.android/debug.keystore
-          cp debug.keystore ./debug.keystore
 
       - name: Create .env if missing
         run: |
