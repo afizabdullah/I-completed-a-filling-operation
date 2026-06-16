@@ -1,0 +1,6 @@
+{
+  "name": "WebShield Pro",
+  "description": "A native Android web clipper, secure adblock firewall and overlay companion that replicates a desktop extension. Save web clips, notes, customize protection scripts, browse sites inside the app, and launch persistent draggable overlay templates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
